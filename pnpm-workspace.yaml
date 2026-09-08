@@ -44,9 +44,11 @@ allowBuilds:
   node-addon-require-builtin: false
   # JSONL durability calls MoveFileExW with write-through publication on Windows.
   koffi: true
-  # The session write lock is flock(2) / LockFileEx; fs-ext compiles its
-  # binding with node-gyp at install.
-  fs-ext: true
+  # The session write lock is flock(2) / LockFileEx. fs-ext compiles its
+  # binding with node-gyp at install, but it is only loaded on the POSIX flock
+  # path (see lease.ts), so Windows machines that skip VS Build Tools can deny
+  # the build and still run the harness.
+  fs-ext: false
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
   '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true

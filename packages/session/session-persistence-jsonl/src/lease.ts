@@ -31,10 +31,15 @@
 import { mkdir, open, stat } from 'node:fs/promises'
 import type { FileHandle } from 'node:fs/promises'
 import { join } from 'node:path'
-import { flock } from 'fs-ext'
 import { SessionAlreadyOwnedError } from '@deepseek-ai/dsh-session-persistence'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { acquireLockHandleWin32, releaseLockHandleWin32 } from './win32.ts'
+
+// fs-ext ships a node-gyp native binding that Windows users who skip VS Build
+// Tools never build. It is only needed for the POSIX flock(2) path, so load it
+// lazily on first POSIX use; the win32 branch (named kernel32 semaphore) never
+// touches it, so a missing binding is harmless there.
+let flockFn: ((fd: number, flags: 'exnb' | 'un', cb: (error: Error | null) => void) => void) | undefined
 
 /** Base name of the kernel lock file inside a session's directory. */
 export const LEASE_FILENAME = 'session.lock'
@@ -45,7 +50,9 @@ type HeldLock =
   | { readonly kind: 'win32'; readonly handle: number }
 
 /** Promise face over fs-ext's callback flock, pinned to its string-flag overload. */
-function flockAsync(fd: number, flags: 'exnb' | 'un'): Promise<void> {
+async function flockAsync(fd: number, flags: 'exnb' | 'un'): Promise<void> {
+  const flock = flockFn ?? ((await import('fs-ext')).flock)
+  flockFn = flock
   return new Promise((resolve, reject) => {
     flock(fd, flags, (error) => {
       if (error) reject(error)
